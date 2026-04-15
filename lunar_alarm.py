@@ -141,7 +141,7 @@ class SettingsWindow(ctk.CTkToplevel):
         super().__init__(master, *args, **kwargs)
         self.app = app_instance
         self.title("设置")
-        self.geometry("380x380")
+        self.geometry("400x420")
         self.attributes("-topmost", True)
         self.resizable(False, False)
         self.after(10, self.center_window)
@@ -162,16 +162,22 @@ class SettingsWindow(ctk.CTkToplevel):
         self.remind_input.pack(side="right")
         self.remind_input.insert(0, str(self.app.default_remind_days))
 
-        # 3. 起始年份模式 (New in 0.0.006)
+        # 3. 起始年份模式
         frame_start_mode = ctk.CTkFrame(self, fg_color="transparent")
         frame_start_mode.pack(pady=10, padx=20, fill="x")
-        ctk.CTkLabel(frame_start_mode, text="计算起始年份:").pack(pady=(0, 5))
-        
+        ctk.CTkLabel(frame_start_mode, text="计算起始年份:").pack(side="left")
         self.start_mode_var = ctk.StringVar(value=self.app.start_year_mode)
-        self.start_mode_seg = ctk.CTkSegmentedButton(frame_start_mode, 
-                                                     values=["今年", "出生年"],
-                                                     variable=self.start_mode_var)
-        self.start_mode_seg.pack(fill="x")
+        self.start_mode_seg = ctk.CTkSegmentedButton(frame_start_mode, values=["今年", "出生年"], variable=self.start_mode_var, width=150)
+        self.start_mode_seg.pack(side="right")
+
+        # 4. 显示岁数开关 (New in 0.0.007)
+        frame_show_age = ctk.CTkFrame(self, fg_color="transparent")
+        frame_show_age.pack(pady=10, padx=20, fill="x")
+        ctk.CTkLabel(frame_show_age, text="标题显示岁数 (如: 33岁生日):").pack(side="left")
+        self.show_age_switch = ctk.CTkSwitch(frame_show_age, text="", command=None)
+        self.show_age_switch.pack(side="right")
+        if self.app.show_age_mode:
+            self.show_age_switch.select()
 
         # 按钮区
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -179,7 +185,7 @@ class SettingsWindow(ctk.CTkToplevel):
         ctk.CTkButton(btn_frame, text="保存默认值", width=120, command=self.save_defaults).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="同步现有条目", width=120, fg_color="#D35400", command=self.apply_to_all).pack(side="left", padx=5)
 
-        version_label = ctk.CTkLabel(self, text="version 0.0.006", text_color="gray", font=("Arial", 10))
+        version_label = ctk.CTkLabel(self, text="version 0.0.007", text_color="gray", font=("Arial", 10))
         version_label.pack(side="bottom", pady=10)
 
     def center_window(self):
@@ -190,7 +196,8 @@ class SettingsWindow(ctk.CTkToplevel):
             self.app.default_years = int(self.years_input.get())
             self.app.default_remind_days = int(self.remind_input.get())
             self.app.start_year_mode = self.start_mode_var.get()
-            messagebox.showinfo("成功", "默认设置已保存。")
+            self.app.show_age_mode = self.show_age_switch.get() == 1
+            messagebox.showinfo("成功", "设置已保存。")
             self.destroy()
         except: messagebox.showerror("错误", "请输入数字")
 
@@ -199,9 +206,10 @@ class SettingsWindow(ctk.CTkToplevel):
             years = int(self.years_input.get())
             remind = int(self.remind_input.get())
             self.app.start_year_mode = self.start_mode_var.get()
+            self.app.show_age_mode = self.show_age_switch.get() == 1
             for entry in self.app.entries:
                 entry.set_config(years, remind)
-            messagebox.showinfo("成功", "已同步所有条目设置。")
+            messagebox.showinfo("成功", "已同步设置并应用到全部条目。")
             self.destroy()
         except: messagebox.showerror("错误", "请输入数字")
 
@@ -210,12 +218,13 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("农历生日生成工具")
-        self.geometry("980x680")
+        self.geometry("980x700")
         
         # 配置存储
         self.default_years = 50
         self.default_remind_days = 7
-        self.start_year_mode = "今年" # "今年" 或 "出生年"
+        self.start_year_mode = "今年" 
+        self.show_age_mode = False # 默认不显示岁数
         
         self.entries = []
         self.settings_window = None
@@ -283,6 +292,7 @@ class App(ctk.CTk):
             "default_years": self.default_years,
             "default_remind_days": self.default_remind_days,
             "start_year_mode": self.start_year_mode,
+            "show_age_mode": self.show_age_mode,
             "entries": [entry.get_data() for entry in self.entries if entry.get_data()]
         }
         file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Config Files", "*.json")])
@@ -299,6 +309,7 @@ class App(ctk.CTk):
             self.default_years = data.get("default_years", 50)
             self.default_remind_days = data.get("default_remind_days", 7)
             self.start_year_mode = data.get("start_year_mode", "今年")
+            self.show_age_mode = data.get("show_age_mode", False)
             for entry in list(self.entries): entry.delete_self()
             for edata in data.get("entries", []): self.add_entry(data=edata)
             if not self.entries: self.add_entry()
@@ -308,7 +319,7 @@ class App(ctk.CTk):
         file_path = filedialog.asksaveasfilename(defaultextension=".ics", filetypes=[("iCalendar Files", "*.ics")])
         if not file_path: return
 
-        ics_lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Lunar Tool v0.0.006//CN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"]
+        ics_lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Lunar Tool v0.0.007//CN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"]
         current_year = datetime.datetime.now().year
 
         count = 0
@@ -320,8 +331,6 @@ class App(ctk.CTk):
                 parts = data["lunar"].split('-')
                 birth_year = int(parts[0])
                 l_month, l_day = int(parts[1]), int(parts[2])
-                
-                # 决定起始推算年份
                 calc_start_year = current_year if self.start_year_mode == "今年" else birth_year
 
                 for offset in range(data["years"]):
@@ -334,29 +343,36 @@ class App(ctk.CTk):
                         end_dt = datetime.date(s_date.getYear(), s_date.getMonth(), s_date.getDay()) + datetime.timedelta(days=1)
                         dt_end = end_dt.strftime("%Y%m%d")
 
+                        # 根据开关生成标题
+                        if self.show_age_mode:
+                            age = target_y - birth_year
+                            summary = f"{data['name']}的 {age} 岁农历生日" if age > 0 else f"{data['name']}的出生农历日"
+                        else:
+                            summary = f"{data['name']}的农历生日"
+
                         ics_lines.extend([
                             "BEGIN:VEVENT",
                             f"UID:{uuid.uuid4().hex}",
                             f"DTSTAMP:{datetime.datetime.now().strftime('%Y%m%dT%H%M%SZ')}",
                             f"DTSTART;VALUE=DATE:{dt_start}",
                             f"DTEND;VALUE=DATE:{dt_end}",
-                            f"SUMMARY:{data['name']}的农历生日",
+                            f"SUMMARY:{summary}",
                             f"DESCRIPTION:农历 {l_month}月{l_day}日",
                             "BEGIN:VALARM",
                             "ACTION:DISPLAY",
                             f"TRIGGER:-P{data['remind_days']}D",
-                            f"DESCRIPTION:提醒：{data['name']}的农历生日快到了",
+                            f"DESCRIPTION:提醒：{summary}快到了",
                             "END:VALARM",
                             "END:VEVENT"
                         ])
-                    except: continue # 处理闰月等特殊情况
+                    except: continue 
                 count += 1
             except: continue
 
         ics_lines.append("END:VCALENDAR")
         with open(file_path, "w", encoding="utf-8") as f:
             f.write("\r\n".join(ics_lines))
-        messagebox.showinfo("完成", f"已成功为 {count} 个对象生成日历。")
+        messagebox.showinfo("完成", f"已成功为 {count} 个对象生成日历文件。")
 
 if __name__ == "__main__":
     App().mainloop()
