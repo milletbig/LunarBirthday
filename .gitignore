@@ -12,3 +12,9 @@ __pycache__/
 # 忽略虚拟环境
 venv/
 .env
+
+# 忽略打包与测试产物
+build/
+dist/
+*.spec
+.pytest_cache/
